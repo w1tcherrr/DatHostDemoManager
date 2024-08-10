@@ -1,0 +1,20 @@
+server:
+  port: 9090 # not using default 8080 since that is used often, randomly use 9090
+
+ftp:
+  local:
+    directory: TEMP_DIRECTORY
+    archive-directory: ARCHIVE_DIRECTORY
+    latest-demos-directory: LATEST_DIRECTORY
+    max-archive-demos: 100
+    max-latest-demos: 50
+
+  servers:
+    - host: HOST
+      port: 21
+      username: USERNAME
+      password: PASSWORD
+      demos-folder: RELATIVE_DEMO_PATH
+
+settings:
+  delete-from-ftp: false # must be enabled in production, otherwise demos might be packaged multiple times

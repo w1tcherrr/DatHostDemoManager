@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Logs</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: monospace;
+            background-color: #f4f4f4;
+        }
+
+        #logContent {
+            padding: 10px;
+            height: 100vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            background-color: #222;
+            color: #0f0;
+        }
+    </style>
+</head>
+<body>
+<pre id="logContent"></pre>
+
+<script>
+    const logElement = document.getElementById('logContent');
+    let previousLogLength = 0;
+
+    function fetchLogs() {
+        fetch('/logs')
+            .then(response => response.text())
+            .then(data => {
+                const lines = data.split('\n');
+                const last24Hours = [];
+                const now = new Date();
+                const limitTime = now.getTime() - (24 * 60 * 60 * 1000); // 24 hours in milliseconds
+
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    const line = lines[i];
+                    const logDateTimeMatch = line.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+                    if (logDateTimeMatch) {
+                        const logDateTime = new Date(logDateTimeMatch[0]);
+                        if (logDateTime.getTime() < limitTime) {
+                            break;
+                        }
+                    }
+                    last24Hours.push(line);
+                    if (last24Hours.length >= 1000) {
+                        break;
+                    }
+                }
+
+                const newLogContent = last24Hours.reverse().join('\n');
+
+                // Check if new content is different from the current content
+                if (newLogContent.length !== previousLogLength) {
+                    logElement.textContent = newLogContent;
+                    previousLogLength = newLogContent.length;
+                    logElement.scrollTop = logElement.scrollHeight; // Scroll to bottom
+                }
+            })
+            .catch(error => console.error('Error fetching logs:', error));
+    }
+
+    setInterval(fetchLogs, 2000); // Refresh every 2 seconds
+    fetchLogs(); // Initial load
+</script>
+</body>
+</html>
