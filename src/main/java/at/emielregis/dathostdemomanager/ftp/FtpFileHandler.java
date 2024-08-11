@@ -130,7 +130,6 @@ public class FtpFileHandler {
             logger.info("Copied {} to latest demos directory.", newDemoFileName);
         }
 
-
         File localDir = new File(localDirectory);
 
         if (Optional.ofNullable(localDir.list()).orElse(new String[0]).length >= maxArchiveDemos) {
@@ -161,10 +160,15 @@ public class FtpFileHandler {
 
         try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tempZipFile))) {
             for (File file : files) {
+                logger.info("Adding file {} to zip file.", file.getName());
                 zos.putNextEntry(new ZipEntry(file.getName()));
                 Files.copy(file.toPath(), zos);
                 zos.closeEntry();
             }
+        } catch (IOException e) {
+            logger.error("Error occurred while creating zip file: {}", finalZipFile.getName(), e);
+        }
+        try {
             if (tempZipFile.renameTo(finalZipFile)) {
                 logger.info("Successfully created archive: {}", finalZipFile.getName());
 
@@ -178,8 +182,6 @@ public class FtpFileHandler {
             } else {
                 logger.error("Failed to rename temporary zip file to final destination: {}", finalZipFile.getName());
             }
-        } catch (IOException e) {
-            logger.error("Error occurred while creating zip file: {}", finalZipFile.getName(), e);
         } finally {
             if (tempZipFile.exists() && !finalZipFile.exists()) {
                 if (tempZipFile.delete()) {
@@ -223,7 +225,11 @@ public class FtpFileHandler {
 
     private long extractDateFromFilename(File file) {
         String filename = file.getName();
-        String datePart = filename.split("_")[0];
+        String[] split = filename.split("_");
+        if (split.length < 2) {
+            return Long.MAX_VALUE;
+        }
+        String datePart = split[0] + "_" + split[1];
         try {
             return LocalDateTime.parse(datePart, DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")).toEpochSecond(ZoneOffset.UTC);
         } catch (DateTimeParseException e) {
