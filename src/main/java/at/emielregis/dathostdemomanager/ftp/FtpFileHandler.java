@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -43,14 +44,35 @@ public class FtpFileHandler {
     @Value("${ftp.local.max-latest-demos}")
     private int maxLatestDemos;
 
+    @Value("${settings.minutes-after-demo}")
+    private int neededMinutesPassed;
+
     @Value("${settings.delete-from-ftp}")
     private boolean deleteFromFtp;
+
+    @Value("${settings.allowed-file-ending}")
+    private String allowedFileEnding;
 
     public void copyFileFromFtp(FTPClient ftpClient, String remoteFileName) throws IOException {
         cleanUpTempFiles(localDirectory);
 
+        if (!remoteFileName.endsWith(allowedFileEnding)) {
+            logger.info("Skipping file: {}, as it does not end with: {}", remoteFileName, allowedFileEnding);
+            return;
+        }
+
         String localFilePath = localDirectory + "/" + remoteFileName;
         File localFile = new File(localFilePath);
+
+        long epochSecond = extractDateFromFilename(remoteFileName);
+        LocalDateTime fileTime = LocalDateTime.ofEpochSecond(epochSecond, 0, ZoneOffset.UTC);
+        LocalDateTime currentTime = LocalDateTime.now();
+        long minutes = Math.abs(ChronoUnit.MINUTES.between(fileTime, currentTime));
+
+        if (minutes <= neededMinutesPassed) {
+            logger.info("Skipping demo for now: {}, minutes passed since creation: {}", remoteFileName, minutes);
+            return;
+        }
 
         if (localFile.exists()) {
             logger.info("File already exists: {}", remoteFileName);
@@ -227,7 +249,8 @@ public class FtpFileHandler {
         String filename = file.getName();
         String[] split = filename.split("_");
         if (split.length < 2) {
-            return Long.MAX_VALUE;
+            logger.warn("Failed to parse date from filename: {}. Falling back to last modified time.", filename);
+            return file.lastModified();
         }
         String datePart = split[0] + "_" + split[1];
         try {
@@ -235,6 +258,21 @@ public class FtpFileHandler {
         } catch (DateTimeParseException e) {
             logger.warn("Failed to parse date from filename: {}. Falling back to last modified time.", filename, e);
             return file.lastModified(); // fallback to last modified time if the file does not have a correct name
+        }
+    }
+
+    private long extractDateFromFilename(String filename) {
+        String[] split = filename.split("_");
+        if (split.length < 2) {
+            logger.warn("Failed to parse date from filename: {}. Falling back to last modified time.", filename);
+            return LocalDateTime.now().toEpochSecond(ZoneOffset.UTC);
+        }
+        String datePart = split[0] + "_" + split[1];
+        try {
+            return LocalDateTime.parse(datePart, DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")).toEpochSecond(ZoneOffset.UTC);
+        } catch (DateTimeParseException e) {
+            logger.warn("Failed to parse date from filename: {}. Falling back to last modified time.", filename, e);
+            return LocalDateTime.now().toEpochSecond(ZoneOffset.UTC);
         }
     }
 }

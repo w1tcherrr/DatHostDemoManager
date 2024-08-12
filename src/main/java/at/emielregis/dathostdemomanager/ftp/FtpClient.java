@@ -92,9 +92,6 @@ public class FtpClient {
                 if (files != null && files.length > 0) {
                     logger.info("Files found in the 'demos' directory of FTP server {}: {}", host, String.join(", ", files));
                     for (String file : files) {
-                        if (!file.endsWith(".dem")) {
-                            continue; // only copy demo files
-                        }
                         logger.info("Copying file: {}", file);
                         ftpFileHandler.copyFileFromFtp(ftpClient, file);
                     }
