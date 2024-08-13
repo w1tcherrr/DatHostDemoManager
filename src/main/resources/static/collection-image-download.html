@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Collection Images</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        input[type="text"] {
+            width: 300px;
+            padding: 8px;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        #message {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        #loading {
+            font-style: italic;
+            color: blue;
+        }
+
+        #disclaimer {
+            margin-top: 20px;
+            font-style: italic;
+            color: gray;
+        }
+
+        #map-details, #statistics, #unparsed-ids {
+            margin-top: 20px;
+        }
+
+        .map {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .map img {
+            max-width: 100px;
+            height: auto;
+        }
+
+        .map h3 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .map p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+<h1>Download Collection Images</h1>
+<label for="collectionId">Enter Collection ID:</label>
+<input type="text" id="collectionId" placeholder="Enter Steam Collection ID">
+<button onclick="downloadImages()">Download Images</button>
+<button onclick="useLawryCollection()">Use Lawry Collection</button>
+<button onclick="useW1tcherCollection()">Use w1tcher Collection</button>
+
+<div id="message"></div>
+<div id="loading"></div>
+<div id="statistics"></div>
+<div id="map-details"></div>
+<div id="unparsed-ids"></div>
+<div id="disclaimer">*The images will be automatically downloaded to your Windows "Downloads" folder.</div>
+
+<script>
+    function extractCollectionId(url) {
+        const idMatch = url.match(/id=(\d+)/);
+        return idMatch ? idMatch[1] : url;
+    }
+
+    function downloadImages() {
+        // Clear previous messages
+        document.getElementById('message').textContent = "";
+        document.getElementById('unparsed-ids').textContent = "";
+
+        let collectionId = document.getElementById('collectionId').value;
+        if (!collectionId) {
+            document.getElementById('message').textContent = "Please enter a collection ID.";
+            return;
+        }
+
+        collectionId = extractCollectionId(collectionId);
+        document.getElementById('collectionId').value = collectionId;
+
+        // Disable buttons
+        setButtonsDisabled(true);
+
+        // Show loading message
+        document.getElementById('loading').textContent = "Processing... Please wait.";
+
+        fetch(`/api/collection/download?collectionId=${collectionId}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').textContent = ""; // Clear loading message
+
+                const maps = data.maps;
+                const unparsedIds = data.unparsedIds;
+
+                document.getElementById('message').textContent = "Images downloaded successfully!";
+                displayUnparsedIds(unparsedIds);
+                displayMapDetails(maps);
+                displayStatistics(maps);
+            })
+            .catch(error => {
+                document.getElementById('loading').textContent = ""; // Clear loading message
+                document.getElementById('message').textContent = "Error: " + error.message;
+            })
+            .finally(() => {
+                // Re-enable buttons
+                setButtonsDisabled(false);
+            });
+    }
+
+    function setButtonsDisabled(disabled) {
+        document.querySelectorAll('button').forEach(button => {
+            button.disabled = disabled;
+        });
+    }
+
+    function extractCollectionId(url) {
+        const idMatch = url.match(/id=(\d+)/);
+        return idMatch ? idMatch[1] : url;
+    }
+
+    function displayMapDetails(maps) {
+        maps.sort((a, b) => b.subscriptions - a.subscriptions);
+
+        const mapDetailsDiv = document.getElementById('map-details');
+        mapDetailsDiv.innerHTML = '';
+
+        maps.forEach(map => {
+            const mapDiv = document.createElement('div');
+            mapDiv.className = 'map';
+            mapDiv.innerHTML = `
+            <img src="${map.previewUrl}" alt="${map.name}">
+            <h3>${map.name}</h3>
+            <p>ID: ${map.id}</p>
+            <p>Subscriptions: ${map.subscriptions}</p>
+            <p>Lifetime Subscriptions: ${map.lifetimeSubscriptions}</p>
+            <p>Favorites: ${map.lifetimeFavorites}</p>
+        `;
+            mapDetailsDiv.appendChild(mapDiv);
+        });
+    }
+
+    function displayStatistics(maps) {
+        const totalSubscriptions = maps.reduce((sum, map) => sum + map.subscriptions, 0);
+        const totalLifetimeSubscriptions = maps.reduce((sum, map) => sum + map.lifetimeSubscriptions, 0);
+        const totalFavorites = maps.reduce((sum, map) => sum + map.lifetimeFavorites, 0);
+
+        const statisticsDiv = document.getElementById('statistics');
+        statisticsDiv.innerHTML = `
+        <h2>Combined Statistics</h2>
+        <p>Total Subscriptions: ${totalSubscriptions}</p>
+        <p>Total Lifetime Subscriptions: ${totalLifetimeSubscriptions}</p>
+        <p>Total Favorites: ${totalFavorites}</p>
+    `;
+    }
+
+    function displayUnparsedIds(unparsedIds) {
+        if (unparsedIds.length > 0) {
+            const unparsedIdsDiv = document.getElementById('unparsed-ids');
+            unparsedIdsDiv.innerHTML = `
+            <h2>Could Not Parse the Following IDs:</h2>
+            <p>${unparsedIds.join(', ')}</p>
+        `;
+        }
+    }
+
+    function useLawryCollection() {
+        const lawryId = "3151387230";
+        document.getElementById('collectionId').value = lawryId;
+    }
+
+    function useW1tcherCollection() {
+        const w1tcherId = "3070269903";
+        document.getElementById('collectionId').value = w1tcherId;
+    }
+
+    document.getElementById('collectionId').addEventListener('input', function () {
+        let currentValue = document.getElementById('collectionId').value;
+        const collectionId = extractCollectionId(currentValue);
+        document.getElementById('collectionId').value = collectionId;
+    });
+</script>
+</body>
+</html>
