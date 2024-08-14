@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Links</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .link-container {
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        #killButton {
+            display: block;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #ff5555;
+            color: white;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+<h1>Navigation Links</h1>
+
+<div class="link-container">
+    <button onclick="navigateTo('live-logs.html')">Live Logs</button>
+    <button onclick="navigateTo('collection-image-download.html')">Collection Image Download</button>
+</div>
+
+<button id="killButton" onclick="killApplication()">Kill Application</button>
+
+<script>
+    function navigateTo(page) {
+        window.location.href = `/${page}`;
+    }
+
+    function killApplication() {
+        fetch('api/kill')
+            .then(response => response.text())
+            .then(data => {
+                alert(data); // Show a message when the application is shutting down
+            })
+            .catch(error => console.error('Error killing application:', error));
+    }
+</script>
+</body>
+</html>

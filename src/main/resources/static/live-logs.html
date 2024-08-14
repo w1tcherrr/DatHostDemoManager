@@ -14,29 +14,16 @@
 
         #logContent {
             padding: 10px;
-            height: 90vh;
+            height: 100vh;
             overflow-y: auto;
             white-space: pre-wrap;
             background-color: #222;
             color: #0f0;
         }
-
-        #killButton {
-            display: block;
-            width: 100%;
-            padding: 10px;
-            background-color: #ff5555;
-            color: white;
-            text-align: center;
-            cursor: pointer;
-            font-weight: bold;
-            border: none;
-        }
     </style>
 </head>
 <body>
 <pre id="logContent"></pre>
-<button id="killButton">Kill Application</button>
 
 <script>
     const logElement = document.getElementById('logContent');
@@ -77,17 +64,6 @@
             })
             .catch(error => console.error('Error fetching logs:', error));
     }
-
-    function killApplication() {
-        fetch('api/kill')
-            .then(response => response.text())
-            .then(data => {
-                alert(data); // Show a message when the application is shutting down
-            })
-            .catch(error => console.error('Error killing application:', error));
-    }
-
-    document.getElementById('killButton').addEventListener('click', killApplication);
 
     setInterval(fetchLogs, 2000); // Refresh every 2 seconds
     fetchLogs(); // Initial load
