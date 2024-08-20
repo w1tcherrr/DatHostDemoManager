@@ -25,3 +25,4 @@ settings:
   run-interval: 10 # how often the demos are fetched in minutes
   minutes-after-demo: 360 # 6 hours - the server time is 2 hours off to local time, so the difference is 120 minutes from the start
   allowed-file-ending: ".dem"
+  workshop-image-path: WORKSHOP_IMAGE_PATH

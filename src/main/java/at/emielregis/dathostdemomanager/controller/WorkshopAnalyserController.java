@@ -5,6 +5,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import okhttp3.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,12 +27,18 @@ import java.util.Map;
 @RestController
 public class WorkshopAnalyserController {
 
+    @Value("${settings.workshop-image-path}")
+    private String workshopImagePath;
+
+    private static final Logger logger = LoggerFactory.getLogger(WorkshopAnalyserController.class);
+
     private record PublishedMap(String name, String id, int subscriptions, int lifetimeSubscriptions,
                                 int lifetimeFavorites, String previewUrl) {
     }
 
     @GetMapping("/api/collection/download")
     public Map<String, Object> downloadCollectionImages(@RequestParam String collectionId) {
+        logger.info("Starting to download collection images for collectionId: {}", collectionId);
         String[] ids = getPublishedMapIdsForCollection(collectionId);
         List<PublishedMap> mapList = new ArrayList<>();
         List<String> unparsedIds = new ArrayList<>();
@@ -39,23 +48,24 @@ public class WorkshopAnalyserController {
             if (map != null) {
                 try {
                     downloadImage(map.previewUrl(), map.name());
+                    logger.info("Downloaded image for map: {}", map.name());
                 } catch (IOException e) {
-                    System.err.println("Failed to download image for " + map.name() + ": " + e.getMessage());
+                    logger.error("Failed to download image for map: {}", map.name(), e);
                 }
                 mapList.add(map);
             } else {
-                unparsedIds.add(id); // Accumulate unparsed IDs
+                unparsedIds.add(id);
+                logger.warn("Failed to parse map with id: {}", id);
             }
         }
 
-        // Prepare the response map
         Map<String, Object> response = new HashMap<>();
         response.put("maps", mapList);
         response.put("unparsedIds", unparsedIds);
 
-        return response; // Return both maps and unparsed IDs
+        logger.info("Download process completed. Parsed {} maps, {} maps could not be parsed.", mapList.size(), unparsedIds.size());
+        return response;
     }
-
 
     private String[] getPublishedMapIdsForCollection(String id) {
         OkHttpClient client = new OkHttpClient();
@@ -68,11 +78,12 @@ public class WorkshopAnalyserController {
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
             String responseData = response.body().string();
+            logger.info("Successfully retrieved collection details for collectionId: {}", id);
             return parseIds(responseData);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Failed to retrieve collection details for collectionId: {}", id, e);
+            throw new IllegalStateException("Unable to retrieve collection details", e);
         }
-        throw new IllegalStateException();
     }
 
     private String[] parseIds(String responseData) {
@@ -86,6 +97,7 @@ public class WorkshopAnalyserController {
             JsonElement child = childrenArray.get(i);
             publishedFileIds[i] = child.getAsJsonObject().get("publishedfileid").getAsString();
         }
+        logger.info("Parsed {} published file IDs from collection details.", publishedFileIds.length);
         return publishedFileIds;
     }
 
@@ -100,11 +112,12 @@ public class WorkshopAnalyserController {
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
             String responseData = response.body().string();
+            logger.info("Successfully retrieved details for map id: {}", id);
             return parsePublishedMap(responseData, id);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Failed to retrieve details for map id: {}", id, e);
+            return null;
         }
-        return null;
     }
 
     private PublishedMap parsePublishedMap(String responseData, String id) {
@@ -113,7 +126,7 @@ public class WorkshopAnalyserController {
                 .getAsJsonArray("publishedfiledetails")
                 .get(0).getAsJsonObject();
         if (!details.has("title")) {
-            System.out.println("COULD NOT PARSE: " + id);
+            logger.warn("Could not parse map with id: {}", id);
             return null;
         }
         String name = details.get("title").getAsString();
@@ -121,6 +134,7 @@ public class WorkshopAnalyserController {
         int lifetimeSubscriptions = details.get("lifetime_subscriptions").getAsInt();
         int lifetimeFavorites = details.get("lifetime_favorited").getAsInt();
         String previewUrl = details.get("preview_url").getAsString();
+        logger.info("Parsed map: {} (id: {})", name, id);
         return new PublishedMap(name, id, subscriptions, lifetimeSubscriptions, lifetimeFavorites, previewUrl);
     }
 
@@ -128,15 +142,15 @@ public class WorkshopAnalyserController {
         URL url = new URL(imageUrl);
         InputStream in = url.openStream();
         try (ReadableByteChannel rbc = Channels.newChannel(in)) {
-            String userHome = System.getProperty("user.home");
-            String downloadPath = userHome + "\\Downloads\\Images"; // Windows Downloads directory path
-            File directory = new File(downloadPath);
+            File directory = new File(workshopImagePath);
             if (!directory.exists()) {
-                directory.mkdirs(); // Create the directory if it does not exist
+                directory.mkdirs();
+                logger.info("Created directory: {}", workshopImagePath);
             }
             String sanitizedFileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
             try (FileOutputStream fos = new FileOutputStream(new File(directory, sanitizedFileName + ".png"))) {
                 fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+                logger.info("Image saved as: {}", sanitizedFileName + ".png");
             }
         }
     }
