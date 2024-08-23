@@ -27,13 +27,19 @@ import java.util.Map;
 @RestController
 public class WorkshopAnalyserController {
 
+    private enum MapType {
+        HOSTAGE,
+        DEFUSAL,
+        UNKNOWN
+    }
+
     @Value("${settings.workshop-image-path}")
     private String workshopImagePath;
 
     private static final Logger logger = LoggerFactory.getLogger(WorkshopAnalyserController.class);
 
     private record PublishedMap(String name, String id, int subscriptions, int lifetimeSubscriptions,
-                                int lifetimeFavorites, boolean isHostage, String previewUrl) {
+                                int lifetimeFavorites, MapType mapType, String previewUrl) {
     }
 
     @GetMapping("/api/collection/download")
@@ -47,7 +53,7 @@ public class WorkshopAnalyserController {
             PublishedMap map = getPublishedMapForId(id);
             if (map != null) {
                 try {
-                    downloadImage(map.previewUrl(), map.name(), map.isHostage());
+                    downloadImage(map.previewUrl(), map.name(), map.mapType().toString());
                     logger.info("Downloaded image for map: {}", map.name());
                 } catch (IOException e) {
                     logger.error("Failed to download image for map: {}", map.name(), e);
@@ -135,11 +141,20 @@ public class WorkshopAnalyserController {
         int lifetimeFavorites = details.get("lifetime_favorited").getAsInt();
         String previewUrl = details.get("preview_url").getAsString();
         boolean isHostage = details.get("description").getAsString().toLowerCase().contains("hostage");
+        boolean isDefusal = details.get("description").getAsString().toLowerCase().contains("defusal");
+        MapType type;
+        if (isHostage && isDefusal || (!isHostage && !isDefusal)) {
+            type = MapType.UNKNOWN;
+        } else if (isHostage) {
+            type = MapType.HOSTAGE;
+        } else {
+            type = MapType.DEFUSAL;
+        }
         logger.info("Parsed map: {} (id: {})", name, id);
-        return new PublishedMap(name, id, subscriptions, lifetimeSubscriptions, lifetimeFavorites, isHostage, previewUrl);
+        return new PublishedMap(name, id, subscriptions, lifetimeSubscriptions, lifetimeFavorites, type, previewUrl);
     }
 
-    private void downloadImage(String imageUrl, String fileName, boolean hostage) throws IOException {
+    private void downloadImage(String imageUrl, String fileName, String tag) throws IOException {
         URL url = new URL(imageUrl);
         InputStream in = url.openStream();
         try (ReadableByteChannel rbc = Channels.newChannel(in)) {
@@ -149,9 +164,7 @@ public class WorkshopAnalyserController {
                 logger.info("Created directory: {}", workshopImagePath);
             }
             String sanitizedFileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
-            if (hostage) {
-                sanitizedFileName = sanitizedFileName + " (HOSTAGE)";
-            }
+            sanitizedFileName = sanitizedFileName + " (" + tag + ")";
             try (FileOutputStream fos = new FileOutputStream(new File(directory, sanitizedFileName + ".png"))) {
                 fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
                 logger.info("Image saved as: {}", sanitizedFileName + ".png");
