@@ -20,7 +20,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -271,11 +270,24 @@ public class FtpFileHandler {
     }
 
     private long calculateTotalFileSize(FTPClient ftpClient, String directoryPath) throws IOException {
+        long totalSize = 0;
+
+        // List files and directories at the given path
         FTPFile[] files = ftpClient.listFiles(directoryPath);
-        return Arrays.stream(files)
-                .filter(FTPFile::isFile)
-                .mapToLong(FTPFile::getSize)
-                .sum();
+
+        for (FTPFile file : files) {
+            // If it's a file, add its size
+            if (file.isFile()) {
+                totalSize += file.getSize();
+            }
+            // If it's a directory, recursively calculate the size
+            else if (file.isDirectory()) {
+                String subDirectoryPath = directoryPath + "/" + file.getName();
+                totalSize += calculateTotalFileSize(ftpClient, subDirectoryPath);
+            }
+        }
+
+        return totalSize;
     }
 
     private boolean deleteDirectoryRecursively(FTPClient ftpClient, String dirPath) throws IOException {
