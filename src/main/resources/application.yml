@@ -18,11 +18,21 @@ ftp:
       port: 21
       username: USERNAME
       password: PASSWORD
+      server-id: SERVER_ID
       demos-folder: RELATIVE_DEMO_PATH
+      maps-folder: RELATIVE_MAPS_PATH
 
 settings:
-  delete-from-ftp: false # must be enabled in production, otherwise demos might be packaged multiple times
-  run-interval: 10 # how often the demos are fetched in minutes
-  minutes-after-demo: 360 # 6 hours - the server time is 2 hours off to local time, so the difference is 120 minutes from the start
-  allowed-file-ending: ".dem"
+  demos:
+    delete-demos: false # must be enabled in production, otherwise demos might be packaged multiple times
+    run-interval-demo-fetching: 10 # how often the demos are fetched in minutes
+    minutes-after-demo: 360 # 6 hours - the server time is 2 hours off to local time, so the difference is 120 minutes from the start
+    allowed-file-ending: ".dem"
+  maps:
+    delete-maps: false
+    run-interval-map-deletion: 10
+    min-megabytes-maps: 10_000
   workshop-image-path: WORKSHOP_IMAGE_PATH
+  dathost-credentials:
+    username: USERNAME
+    password: PASSWORD

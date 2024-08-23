@@ -33,7 +33,7 @@ public class WorkshopAnalyserController {
     private static final Logger logger = LoggerFactory.getLogger(WorkshopAnalyserController.class);
 
     private record PublishedMap(String name, String id, int subscriptions, int lifetimeSubscriptions,
-                                int lifetimeFavorites, String previewUrl) {
+                                int lifetimeFavorites, boolean isHostage, String previewUrl) {
     }
 
     @GetMapping("/api/collection/download")
@@ -47,7 +47,7 @@ public class WorkshopAnalyserController {
             PublishedMap map = getPublishedMapForId(id);
             if (map != null) {
                 try {
-                    downloadImage(map.previewUrl(), map.name());
+                    downloadImage(map.previewUrl(), map.name(), map.isHostage());
                     logger.info("Downloaded image for map: {}", map.name());
                 } catch (IOException e) {
                     logger.error("Failed to download image for map: {}", map.name(), e);
@@ -134,11 +134,12 @@ public class WorkshopAnalyserController {
         int lifetimeSubscriptions = details.get("lifetime_subscriptions").getAsInt();
         int lifetimeFavorites = details.get("lifetime_favorited").getAsInt();
         String previewUrl = details.get("preview_url").getAsString();
+        boolean isHostage = details.get("description").getAsString().toLowerCase().contains("hostage");
         logger.info("Parsed map: {} (id: {})", name, id);
-        return new PublishedMap(name, id, subscriptions, lifetimeSubscriptions, lifetimeFavorites, previewUrl);
+        return new PublishedMap(name, id, subscriptions, lifetimeSubscriptions, lifetimeFavorites, isHostage, previewUrl);
     }
 
-    private void downloadImage(String imageUrl, String fileName) throws IOException {
+    private void downloadImage(String imageUrl, String fileName, boolean hostage) throws IOException {
         URL url = new URL(imageUrl);
         InputStream in = url.openStream();
         try (ReadableByteChannel rbc = Channels.newChannel(in)) {
@@ -148,6 +149,9 @@ public class WorkshopAnalyserController {
                 logger.info("Created directory: {}", workshopImagePath);
             }
             String sanitizedFileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
+            if (hostage) {
+                sanitizedFileName = sanitizedFileName + " (HOSTAGE)";
+            }
             try (FileOutputStream fos = new FileOutputStream(new File(directory, sanitizedFileName + ".png"))) {
                 fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
                 logger.info("Image saved as: {}", sanitizedFileName + ".png");

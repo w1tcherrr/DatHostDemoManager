@@ -1,6 +1,8 @@
 package at.emielregis.dathostdemomanager.ftp;
 
+import at.emielregis.dathostdemomanager.dathost.DatHostServerAccessor;
 import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +20,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -44,14 +47,132 @@ public class FtpFileHandler {
     @Value("${ftp.local.max-latest-demos}")
     private int maxLatestDemos;
 
-    @Value("${settings.minutes-after-demo}")
+    @Value("${settings.demos.minutes-after-demo}")
     private int neededMinutesPassed;
 
-    @Value("${settings.delete-from-ftp}")
-    private boolean deleteFromFtp;
-
-    @Value("${settings.allowed-file-ending}")
+    @Value("${settings.demos.allowed-file-ending}")
     private String allowedFileEnding;
+
+    @Value("${settings.maps.min-megabytes-maps}")
+    private int minMegabytesMaps;
+
+    public void connectAndCopyDemos(FtpClientData ftpClientData) {
+        connectAndExecuteFtpOperationForFile(
+                ftpClientData,
+                ftpClientData.getDemosFolder(),
+                "Copying"
+        );
+    }
+
+    public void connectAndDeleteMaps(FtpClientData ftpClientData, DatHostServerAccessor serverAccessor) {
+        long totalSizeInMegabytes = getTotalMapFilesSize(ftpClientData);
+        if (totalSizeInMegabytes < minMegabytesMaps) {
+            logger.warn("Total map files size is less than {} MB. Aborting deletion.", minMegabytesMaps);
+            return;
+        }
+
+        String serverId = ftpClientData.getServerId();
+        boolean isServerRunning = serverAccessor.isServerRunning(serverId);
+
+        if (!isServerRunning) {
+            logger.warn("Server is not running, proceeding with map deletion.");
+            performFtpMapDeletion(ftpClientData);
+            return;
+        }
+
+        int amountOfPlayersOnServer = serverAccessor.getAmountOfPlayersOnServer(serverId);
+
+        if (amountOfPlayersOnServer > 0) {
+            logger.warn("Server is running and not empty. Aborting map deletion.");
+            return; // Do not delete maps unless server is empty!
+        }
+
+        boolean serverShutdownSuccess = serverAccessor.shutdownServer(serverId);
+        if (!serverShutdownSuccess) {
+            logger.warn("Failed to shutdown the server. Aborting map deletion.");
+            return;
+        }
+
+        performFtpMapDeletion(ftpClientData);
+
+        boolean serverStartSuccess = serverAccessor.startServer(serverId);
+        if (!serverStartSuccess) {
+            logger.warn("Failed to restart the server after map deletion.");
+        }
+    }
+
+    private long getTotalMapFilesSize(FtpClientData ftpClientData) {
+        try {
+            ftpClientData.connect();
+            ftpClientData.login();
+
+            String content730Folder = ftpClientData.getMapsFolder() + "/content/730";
+            long totalSizeInBytes = calculateTotalFileSize(ftpClientData.getFtpClient(), content730Folder);
+
+            ftpClientData.logout();
+            ftpClientData.disconnect();
+
+            return totalSizeInBytes / (1024 * 1024); // Convert to MB
+        } catch (IOException e) {
+            logger.error("Error occurred while calculating total map file size.", e);
+            return 0;
+        }
+    }
+
+    private void performFtpMapDeletion(FtpClientData ftpClientData) {
+        try {
+            ftpClientData.connect();
+            ftpClientData.login();
+
+            deleteMapFiles(ftpClientData.getFtpClient(), ftpClientData.getMapsFolder());
+
+            ftpClientData.logout();
+            ftpClientData.disconnect();
+        } catch (Exception e) {
+            logger.error("Error during FTP map deletion operation.", e);
+        }
+    }
+
+    private void connectAndExecuteFtpOperationForFile(FtpClientData ftpClientData, String targetFolder, String actionDescription) {
+
+        try {
+            ftpClientData.connect();
+            logger.info("Connected to FTP server {} on port {}", ftpClientData.getHost(), ftpClientData.getPort());
+
+            ftpClientData.login();
+            logger.info("Logged in to FTP server {} as user {}", ftpClientData.getHost(), ftpClientData.getUsername());
+
+            if (ftpClientData.changeWorkingDirectory(targetFolder)) {
+                logger.info("Changed target directory to {}", targetFolder);
+                String[] files = ftpClientData.listNames();
+                if (files != null && files.length > 0) {
+                    logger.info("Files found in the '{}' directory of FTP server {}: {}", targetFolder, ftpClientData.getHost(), String.join(", ", files));
+                    for (String file : files) {
+                        logger.info("{} file: {}", actionDescription, file);
+                        copyFileFromFtp(ftpClientData.getFtpClient(), file);
+                    }
+                } else {
+                    logger.info("No files found in the '{}' directory of FTP server {}", targetFolder, ftpClientData.getHost());
+                }
+            } else {
+                logger.warn("Failed to change directory to '{}' on FTP server {}", targetFolder, ftpClientData.getServerId());
+            }
+
+            ftpClientData.logout();
+            logger.info("Logged out from FTP server {}", ftpClientData.getHost());
+        } catch (IOException e) {
+            logger.error("Error occurred during FTP operation", e);
+        } finally {
+            try {
+                if (ftpClientData.isConnected()) {
+                    ftpClientData.disconnect();
+                    logger.info("Disconnected from FTP server {}", ftpClientData.getHost());
+                }
+            } catch (IOException ex) {
+                logger.error("Error occurred while disconnecting from FTP server", ex);
+            }
+        }
+    }
 
     public void copyFileFromFtp(FTPClient ftpClient, String remoteFileName) throws IOException {
         cleanUpTempFiles(localDirectory);
@@ -99,13 +220,11 @@ public class FtpFileHandler {
                 logger.info("Successfully moved temporary file to final destination: {}", localFilePath);
                 handleArchiveAndLatestDemos(remoteFileName);
 
-                if (deleteFromFtp) {
-                    boolean deleted = ftpClient.deleteFile(remoteFileName);
-                    if (deleted) {
-                        logger.info("Successfully deleted file: {} from FTP server.", remoteFileName);
-                    } else {
-                        logger.warn("Failed to delete file: {} from FTP server.", remoteFileName);
-                    }
+                boolean deleted = ftpClient.deleteFile(remoteFileName);
+                if (deleted) {
+                    logger.info("Successfully deleted file: {} from FTP server.", remoteFileName);
+                } else {
+                    logger.warn("Failed to delete file: {} from FTP server.", remoteFileName);
                 }
             } else {
                 logger.error("Failed to rename temporary file to final destination: {}", localFilePath);
@@ -115,6 +234,68 @@ public class FtpFileHandler {
                 logger.warn("Failed to delete temporary file: {}", tempFilePath);
             }
         }
+    }
+
+    public void deleteMapFiles(FTPClient ftpClient, String targetFolder) {
+        String fileToDelete = targetFolder + "/appworkshop_730.acf";
+
+        try {
+            FTPFile[] filesAndDirs = ftpClient.listFiles(targetFolder + "/content/730");
+
+            for (FTPFile fileOrDir : filesAndDirs) {
+                if (fileOrDir.isDirectory()) {
+                    String dirPath = targetFolder + "/content/730/" + fileOrDir.getName();
+                    boolean deleted = deleteDirectoryRecursively(ftpClient, dirPath);
+                    if (deleted) {
+                        logger.info("Successfully deleted directory: {}", dirPath);
+                    } else {
+                        logger.warn("Failed to delete directory: {}", dirPath);
+                    }
+                }
+            }
+
+            if (ftpClient.listFiles(fileToDelete).length > 0) {
+                boolean deleted = ftpClient.deleteFile(fileToDelete);
+                if (deleted) {
+                    logger.info("Successfully deleted file: {}", fileToDelete);
+                } else {
+                    logger.warn("Failed to delete file: {}", fileToDelete);
+                }
+            } else {
+                logger.info("File not found: {}", fileToDelete);
+            }
+
+        } catch (IOException e) {
+            logger.error("Error occurred while trying to delete map files", e);
+        }
+    }
+
+    private long calculateTotalFileSize(FTPClient ftpClient, String directoryPath) throws IOException {
+        FTPFile[] files = ftpClient.listFiles(directoryPath);
+        return Arrays.stream(files)
+                .filter(FTPFile::isFile)
+                .mapToLong(FTPFile::getSize)
+                .sum();
+    }
+
+    private boolean deleteDirectoryRecursively(FTPClient ftpClient, String dirPath) throws IOException {
+        FTPFile[] subFiles = ftpClient.listFiles(dirPath);
+
+        for (FTPFile subFile : subFiles) {
+            String filePath = dirPath + "/" + subFile.getName();
+            if (subFile.isDirectory()) {
+                if (!deleteDirectoryRecursively(ftpClient, filePath)) {
+                    return false;
+                }
+            } else {
+                if (!ftpClient.deleteFile(filePath)) {
+                    logger.warn("Failed to delete file: {}", filePath);
+                    return false;
+                }
+            }
+        }
+
+        return ftpClient.removeDirectory(dirPath);
     }
 
     private void cleanUpTempFiles(String directoryPath) {
