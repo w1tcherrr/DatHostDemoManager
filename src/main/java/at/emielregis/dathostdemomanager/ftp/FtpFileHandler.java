@@ -331,7 +331,7 @@ public class FtpFileHandler {
         // Remove the oldest files until the number of files is below the maxLatestDemos limit
         String[] latestDemosFiles = Optional.ofNullable(latestDemosDir.list()).orElse(new String[0]);
         if (latestDemosFiles.length >= maxLatestDemos) {
-            deleteOldestFiles(latestDemosDir, latestDemosFiles.length - maxLatestDemos + 1);
+            deleteOldestFiles(latestDemosDir, latestDemosFiles.length - maxLatestDemos + 1, newDemoFileName);
         }
 
         Path sourcePath = Paths.get(localDirectory + "/" + newDemoFileName);
@@ -353,11 +353,12 @@ public class FtpFileHandler {
         }
     }
 
-    private void deleteOldestFiles(File directory, int filesToDelete) throws IOException {
+    private void deleteOldestFiles(File directory, int filesToDelete, String newDemoFileName) throws IOException {
         try (Stream<Path> paths = Files.list(directory.toPath())) {
             paths.map(Path::toFile)
                     .sorted(Comparator.comparing(this::extractDateFromFilename)) // Sort by the date extracted from the filename
                     .limit(filesToDelete) // Limit to the number of files that need to be deleted
+                    .filter(file -> file.getName().endsWith(allowedFileEnding) && !file.getName().equals(newDemoFileName) && file.isFile())
                     .forEach(file -> {
                         if (file.delete()) {
                             logger.info("Deleted file: {}", file.getName());
