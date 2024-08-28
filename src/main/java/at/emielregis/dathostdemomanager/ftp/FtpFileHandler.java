@@ -21,6 +21,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -376,6 +377,8 @@ public class FtpFileHandler {
             logger.info("No files to archive in the local directory.");
             return;
         }
+
+        files = Arrays.stream(files).filter(file -> file.isFile() && file.getName().endsWith(allowedFileEnding)).toList().toArray(new File[0]);
 
         String newFileName = getNextArchiveFileName(files.length);
         File tempZipFile = new File(archiveDirectory + "/" + newFileName + ".tmp");
