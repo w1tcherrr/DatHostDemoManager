@@ -1,6 +1,7 @@
 package at.emielregis.dathostdemomanager.ftp;
 
 import at.emielregis.dathostdemomanager.dathost.DatHostServerAccessor;
+import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
 import org.slf4j.Logger;
@@ -81,7 +82,7 @@ public class FtpFileHandler {
 
         int amountOfPlayersOnServer = serverAccessor.getAmountOfPlayersOnServer(serverId);
 
-        if (amountOfPlayersOnServer > 0) {
+        if (amountOfPlayersOnServer != 0) {
             logger.warn("Server is running and not empty. Aborting map deletion.");
             return; // Do not delete maps unless server is empty!
         }
@@ -204,6 +205,7 @@ public class FtpFileHandler {
 
         boolean success = false;
         try (OutputStream outputStream = new FileOutputStream(tempFilePath)) {
+            ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
             if (ftpClient.retrieveFile(remoteFileName, outputStream)) {
                 logger.info("Successfully downloaded file: {} to temporary file {}", remoteFileName, tempFilePath);
                 success = true;

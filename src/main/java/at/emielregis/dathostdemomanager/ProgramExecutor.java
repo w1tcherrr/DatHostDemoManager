@@ -27,6 +27,7 @@ public class ProgramExecutor {
     public void processDemoFiles() {
         if (!deleteDemos) {
             logger.info("Skipping demo deletion.");
+            return;
         }
         ftpConfigProcessor.loadConfigs();
         ftpConfigProcessor.downloadDemos();
@@ -36,6 +37,7 @@ public class ProgramExecutor {
     public void deleteMapFiles() {
         if (!deleteMaps) {
             logger.info("Skipping map deletion.");
+            return;
         }
         ftpConfigProcessor.loadConfigs();
         ftpConfigProcessor.deleteMaps();

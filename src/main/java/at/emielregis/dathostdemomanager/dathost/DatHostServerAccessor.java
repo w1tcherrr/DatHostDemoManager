@@ -67,6 +67,12 @@ public class DatHostServerAccessor {
 
         ResponseEntity<Void> response = restTemplate.exchange(url, HttpMethod.POST, entity, Void.class);
 
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
         return response.getStatusCode() == HttpStatus.OK;
     }
 
