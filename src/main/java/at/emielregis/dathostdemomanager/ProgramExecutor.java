@@ -26,7 +26,7 @@ public class ProgramExecutor {
     @Value("${settings.maps.delete-maps}")
     private boolean deleteMaps;
 
-    @Scheduled(fixedRateString = "${settings.demos.run-interval-demo-fetching}", timeUnit = TimeUnit.SECONDS)
+    @Scheduled(fixedRateString = "${settings.demos.run-interval-demo-fetching}", timeUnit = TimeUnit.MINUTES)
     public void processDemoFiles() {
         if (!fetchDemos) {
             logger.info("Skipping demo fetching and deletion.");
