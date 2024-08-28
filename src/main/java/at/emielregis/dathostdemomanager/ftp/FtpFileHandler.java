@@ -73,7 +73,7 @@ public class FtpFileHandler {
                     logger.info("Files found in the '{}' directory of FTP server {}: {}", targetFolder, ftpClientData.getHost(), String.join(", ", files));
                     for (String file : files) {
                         logger.info("Copying file: {}", file);
-                        copyFileFromFtp(ftpClientData.getFtpClient(), file, deleteDemos);
+                        copyDemoFromFtpAndRemoveOldestIfNeeded(ftpClientData.getFtpClient(), file, deleteDemos);
                     }
                 } else {
                     logger.info("No files found in the '{}' directory of FTP server {}", targetFolder, ftpClientData.getHost());
@@ -167,7 +167,7 @@ public class FtpFileHandler {
         }
     }
 
-    public void copyFileFromFtp(FTPClient ftpClient, String remoteFileName, boolean deleteFile) throws IOException {
+    public void copyDemoFromFtpAndRemoveOldestIfNeeded(FTPClient ftpClient, String remoteFileName, boolean deleteFile) throws IOException {
         cleanUpTempFiles(localDirectory);
 
         if (!remoteFileName.endsWith(allowedFileEnding)) {
@@ -328,8 +328,10 @@ public class FtpFileHandler {
     private void handleArchiveAndLatestDemos(String newDemoFileName) throws IOException {
         File latestDemosDir = new File(latestDemosDirectory);
 
-        if (Optional.ofNullable(latestDemosDir.list()).orElse(new String[0]).length >= maxLatestDemos) {
-            deleteOldestFile(latestDemosDir);
+        // Remove the oldest files until the number of files is below the maxLatestDemos limit
+        String[] latestDemosFiles = Optional.ofNullable(latestDemosDir.list()).orElse(new String[0]);
+        if (latestDemosFiles.length >= maxLatestDemos) {
+            deleteOldestFiles(latestDemosDir, latestDemosFiles.length - maxLatestDemos + 1);
         }
 
         Path sourcePath = Paths.get(localDirectory + "/" + newDemoFileName);
@@ -344,19 +346,27 @@ public class FtpFileHandler {
 
         File localDir = new File(localDirectory);
 
-        if (Optional.ofNullable(localDir.list()).orElse(new String[0]).length >= maxArchiveDemos) {
+        // Check if the local directory exceeds the maxArchiveDemos limit
+        String[] localFiles = Optional.ofNullable(localDir.list()).orElse(new String[0]);
+        if (localFiles.length >= maxArchiveDemos) {
             zipAndClearLocalDirectory(localDir);
         }
     }
 
-    private void deleteOldestFile(File directory) throws IOException {
+    private void deleteOldestFiles(File directory, int filesToDelete) throws IOException {
         try (Stream<Path> paths = Files.list(directory.toPath())) {
             paths.map(Path::toFile)
-                    .sorted(Comparator.comparing(this::extractDateFromFilename))
-                    .limit(1)
-                    .forEach(File::delete);
+                    .sorted(Comparator.comparing(this::extractDateFromFilename)) // Sort by the date extracted from the filename
+                    .limit(filesToDelete) // Limit to the number of files that need to be deleted
+                    .forEach(file -> {
+                        if (file.delete()) {
+                            logger.info("Deleted file: {}", file.getName());
+                        } else {
+                            logger.warn("Failed to delete file: {}", file.getName());
+                        }
+                    });
         }
-        logger.info("Deleted the oldest file in latest demos directory.");
+        logger.info("Deleted {} oldest file(s) in the latest demos directory.", filesToDelete);
     }
 
     private void zipAndClearLocalDirectory(File localDir) {
