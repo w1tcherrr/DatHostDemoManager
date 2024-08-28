@@ -48,9 +48,9 @@ public class FtpConfigProcessor {
         }
     }
 
-    public void downloadDemos() {
+    public void downloadDemos(boolean deleteDemos) {
         for (FtpClientData ftpClientData : this.ftpClientDataList) {
-            ftpFileHandler.connectAndCopyDemos(ftpClientData);
+            ftpFileHandler.connectAndCopyDemos(ftpClientData, deleteDemos);
         }
     }
 

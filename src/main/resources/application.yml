@@ -24,12 +24,13 @@ ftp:
 
 settings:
   demos:
-    delete-demos: false # must be enabled in production, otherwise demos might be packaged multiple times
+    fetch-demos: true # enables whether demos are fetched at all
+    delete-demos: true # enables whether the fetched demos are deleted from the ftp server or not. Must be enabled in production, otherwise demos might be packaged multiple times
     run-interval-demo-fetching: 10 # how often the demos are fetched in minutes
     minutes-after-demo: 360 # 6 hours - the server time is 2 hours off to local time, so the difference is 120 minutes from the start
     allowed-file-ending: ".dem"
   maps:
-    delete-maps: false
+    delete-maps: true
     run-interval-map-deletion: 10
     min-megabytes-maps: 10_000
   workshop-image-path: WORKSHOP_IMAGE_PATH

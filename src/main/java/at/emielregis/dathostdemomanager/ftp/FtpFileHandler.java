@@ -56,12 +56,46 @@ public class FtpFileHandler {
     @Value("${settings.maps.min-megabytes-maps}")
     private int minMegabytesMaps;
 
-    public void connectAndCopyDemos(FtpClientData ftpClientData) {
-        connectAndExecuteFtpOperationForFile(
-                ftpClientData,
-                ftpClientData.getDemosFolder(),
-                "Copying"
-        );
+    public void connectAndCopyDemos(FtpClientData ftpClientData, boolean deleteDemos) {
+        String targetFolder = ftpClientData.getDemosFolder();
+
+        try {
+            ftpClientData.connect();
+            logger.info("Connected to FTP server {} on port {}", ftpClientData.getHost(), ftpClientData.getPort());
+
+            ftpClientData.login();
+            logger.info("Logged in to FTP server {} as user {}", ftpClientData.getHost(), ftpClientData.getUsername());
+
+            if (ftpClientData.changeWorkingDirectory(targetFolder)) {
+                logger.info("Changed target directory to {}", targetFolder);
+                String[] files = ftpClientData.listNames();
+                if (files != null && files.length > 0) {
+                    logger.info("Files found in the '{}' directory of FTP server {}: {}", targetFolder, ftpClientData.getHost(), String.join(", ", files));
+                    for (String file : files) {
+                        logger.info("Copying file: {}", file);
+                        copyFileFromFtp(ftpClientData.getFtpClient(), file, deleteDemos);
+                    }
+                } else {
+                    logger.info("No files found in the '{}' directory of FTP server {}", targetFolder, ftpClientData.getHost());
+                }
+            } else {
+                logger.warn("Failed to change directory to '{}' on FTP server {}", targetFolder, ftpClientData.getServerId());
+            }
+
+            ftpClientData.logout();
+            logger.info("Logged out from FTP server {}", ftpClientData.getHost());
+        } catch (IOException e) {
+            logger.error("Error occurred during FTP operation", e);
+        } finally {
+            try {
+                if (ftpClientData.isConnected()) {
+                    ftpClientData.disconnect();
+                    logger.info("Disconnected from FTP server {}", ftpClientData.getHost());
+                }
+            } catch (IOException ex) {
+                logger.error("Error occurred while disconnecting from FTP server", ex);
+            }
+        }
     }
 
     public void connectAndDeleteMaps(FtpClientData ftpClientData, DatHostServerAccessor serverAccessor) {
@@ -133,48 +167,7 @@ public class FtpFileHandler {
         }
     }
 
-    private void connectAndExecuteFtpOperationForFile(FtpClientData ftpClientData, String targetFolder, String actionDescription) {
-
-        try {
-            ftpClientData.connect();
-            logger.info("Connected to FTP server {} on port {}", ftpClientData.getHost(), ftpClientData.getPort());
-
-            ftpClientData.login();
-            logger.info("Logged in to FTP server {} as user {}", ftpClientData.getHost(), ftpClientData.getUsername());
-
-            if (ftpClientData.changeWorkingDirectory(targetFolder)) {
-                logger.info("Changed target directory to {}", targetFolder);
-                String[] files = ftpClientData.listNames();
-                if (files != null && files.length > 0) {
-                    logger.info("Files found in the '{}' directory of FTP server {}: {}", targetFolder, ftpClientData.getHost(), String.join(", ", files));
-                    for (String file : files) {
-                        logger.info("{} file: {}", actionDescription, file);
-                        copyFileFromFtp(ftpClientData.getFtpClient(), file);
-                    }
-                } else {
-                    logger.info("No files found in the '{}' directory of FTP server {}", targetFolder, ftpClientData.getHost());
-                }
-            } else {
-                logger.warn("Failed to change directory to '{}' on FTP server {}", targetFolder, ftpClientData.getServerId());
-            }
-
-            ftpClientData.logout();
-            logger.info("Logged out from FTP server {}", ftpClientData.getHost());
-        } catch (IOException e) {
-            logger.error("Error occurred during FTP operation", e);
-        } finally {
-            try {
-                if (ftpClientData.isConnected()) {
-                    ftpClientData.disconnect();
-                    logger.info("Disconnected from FTP server {}", ftpClientData.getHost());
-                }
-            } catch (IOException ex) {
-                logger.error("Error occurred while disconnecting from FTP server", ex);
-            }
-        }
-    }
-
-    public void copyFileFromFtp(FTPClient ftpClient, String remoteFileName) throws IOException {
+    public void copyFileFromFtp(FTPClient ftpClient, String remoteFileName, boolean deleteFile) throws IOException {
         cleanUpTempFiles(localDirectory);
 
         if (!remoteFileName.endsWith(allowedFileEnding)) {
@@ -221,11 +214,13 @@ public class FtpFileHandler {
                 logger.info("Successfully moved temporary file to final destination: {}", localFilePath);
                 handleArchiveAndLatestDemos(remoteFileName);
 
-                boolean deleted = ftpClient.deleteFile(remoteFileName);
-                if (deleted) {
-                    logger.info("Successfully deleted file: {} from FTP server.", remoteFileName);
-                } else {
-                    logger.warn("Failed to delete file: {} from FTP server.", remoteFileName);
+                if (deleteFile) {
+                    boolean deleted = ftpClient.deleteFile(remoteFileName);
+                    if (deleted) {
+                        logger.info("Successfully deleted file: {} from FTP server.", remoteFileName);
+                    } else {
+                        logger.warn("Failed to delete file: {} from FTP server.", remoteFileName);
+                    }
                 }
             } else {
                 logger.error("Failed to rename temporary file to final destination: {}", localFilePath);

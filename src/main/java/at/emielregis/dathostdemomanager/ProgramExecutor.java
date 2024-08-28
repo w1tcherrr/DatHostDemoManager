@@ -20,17 +20,20 @@ public class ProgramExecutor {
     @Value("${settings.demos.delete-demos}")
     private boolean deleteDemos;
 
+    @Value("${settings.demos.fetch-demos}")
+    private boolean fetchDemos;
+
     @Value("${settings.maps.delete-maps}")
     private boolean deleteMaps;
 
-    @Scheduled(fixedRateString = "${settings.demos.run-interval-demo-fetching}", timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedRateString = "${settings.demos.run-interval-demo-fetching}", timeUnit = TimeUnit.SECONDS)
     public void processDemoFiles() {
-        if (!deleteDemos) {
-            logger.info("Skipping demo deletion.");
+        if (!fetchDemos) {
+            logger.info("Skipping demo fetching and deletion.");
             return;
         }
         ftpConfigProcessor.loadConfigs();
-        ftpConfigProcessor.downloadDemos();
+        ftpConfigProcessor.downloadDemos(deleteDemos);
     }
 
     @Scheduled(fixedRateString = "${settings.maps.run-interval-map-deletion}", timeUnit = TimeUnit.MINUTES)
